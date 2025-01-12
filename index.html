@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Tetris + BlockBust + Combo + FloatingTexts (v0.02)</title>
+  <title>Block Blast (v0.04) - Server Score</title>
   <style>
+    /* ============ БАЗОВЫЕ СТИЛИ ============ */
     html, body {
       margin: 0;
       padding: 0;
@@ -11,7 +12,6 @@
       text-align: center;
       user-select: none;
     }
-    /* Номер версии */
     #version {
       position: absolute;
       top: 0;
@@ -28,8 +28,9 @@
       font-size: 48px;
       color: #fff;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-      padding-top: 10px;
+      padding: 10px 0 0 0;
     }
+    /* Контейнер под канву */
     #gameContainer {
       display: inline-block;
       position: relative;
@@ -40,6 +41,7 @@
       margin: 0;
       padding: 0;
     }
+    /* Окно Game Over */
     #gameOverMessage {
       position: absolute;
       top: 50%;
@@ -50,10 +52,35 @@
       font-size: 36px;
       color: #ff4444;
       background: rgba(0,0,0,0.7);
-      padding: 20px 40px;
+      padding: 20px;
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0,0,0,0.5);
       display: none;
+      text-align: center;
+    }
+    #nameInput {
+      display: block;
+      margin: 10px auto 0 auto;
+      font-size: 14px;
+      padding: 5px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      text-align: center;
+      width: 120px;
+    }
+    #okBtn {
+      display: block;
+      margin: 10px auto;
+      font-size: 14px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      background: #4caf50;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    #okBtn:hover {
+      background: #3c9f40;
     }
     #restartBtn {
       display: block;
@@ -72,8 +99,8 @@
   </style>
 </head>
 <body>
-  <div id="version">Version 0.02</div>
-  
+  <div id="version">Version 0.04</div>
+
   <div id="scoreboard">
     Score: <span id="scoreValue">0</span>
   </div>
@@ -82,653 +109,12 @@
     <canvas id="gameCanvas" width="450" height="650"></canvas>
     <div id="gameOverMessage">
       GAME OVER!
-      <button id="restartBtn" onclick="restartGame()">Перезапустить</button>
+      <input type="text" id="nameInput" placeholder="Your Name"/>
+      <button id="okBtn">OK</button>
+      <button id="restartBtn">Restart</button>
     </div>
   </div>
 
-  <script>
-    /********************************************************
-     *                   SETTINGS
-     ********************************************************/
-    const BOARD_COLS = 8;
-    const BOARD_ROWS = 8;
-    const BOARD_CELL_SIZE = 45;
-    const BOARD_X = 45;
-    const BOARD_Y = 45;
-
-    const CANVAS_WIDTH  = 450;
-    const CANVAS_HEIGHT = 650;
-
-    // Вычислим Y для новых фигур: чуть ниже поля 
-    // (BOARD_Y + BOARD_ROWS*BOARD_CELL_SIZE — это низ поля)
-    // Добавим +40 px, чтобы было свободное место
-    const PREVIEW_Y = BOARD_Y + (BOARD_ROWS * BOARD_CELL_SIZE) + 40; 
-
-    const PREVIEW_SCALE = 25/45; 
-    const LEFT_MARGIN = 10;
-    const RIGHT_MARGIN= 10;
-
-    // Параметры взрывов, тени, combo
-    const PARTICLE_LIFETIME=30;
-    const PARTICLE_COUNT=12;
-    let showGhost= true;
-    let ghostX=0, ghostY=0;
-    let ghostValid=false;
-    let ghostOverBoardEnough=false;
-
-    let canvas, ctx;
-    let board = [];
-    let score=0;
-    let activePieces=[];
-
-    let draggingPiece=null;
-    let offsetX=0, offsetY=0;
-    let isGameOverFlag=false;
-
-    // Частицы
-    let particles=[];
-
-    // Для combo
-    let comboStreak=1;     
-    let comboTurnsLeft=0; 
-
-    // Всплывающие надписи
-    let floatingTexts=[];
-
-    // 7 classic + BlockBust shapes
-    const ALL_FIGURES=[
-      [[1,1,1,1]],
-      [[1,1],[1,1]],
-      [[0,1,1],[1,1,0]],
-      [[1,1,0],[0,1,1]],
-      [[1,0],[1,0],[1,1]],
-      [[0,1],[0,1],[1,1]],
-      [[1,1,1],[0,1,0]],
-      // block bust:
-      [[1,1,1],[1,1,1],[1,1,1]],
-      [[1,1,1],[1,1,1]],
-      [[1,1],[1,1],[1,1]],
-      [[1,1,1,1,1]],
-      [[1],[1],[1],[1],[1]],
-    ];
-    const COLORS=[
-      "#FF4F4F","#62C542","#3AB5FD","#FFD600","#A45BEB","#FD875E"
-    ];
-
-    // Звуки
-    let placeSound, clearSound, explosionSound;
-
-    /********************************************************
-     *                   INIT
-     ********************************************************/
-    function init(){
-      canvas= document.getElementById("gameCanvas");
-      ctx= canvas.getContext("2d");
-
-      // Пустая доска
-      for(let r=0;r<BOARD_ROWS;r++){
-        board[r]=[];
-        for(let c=0;c<BOARD_COLS;c++){
-          board[r][c]=0;
-        }
-      }
-
-      // Звуки
-      placeSound     = new Audio("sounds/place.mp3");
-      clearSound     = new Audio("sounds/clear.mp3");
-      explosionSound = new Audio("sounds/explosion.mp3");
-
-      generateNewPieces();
-
-      canvas.addEventListener('mousedown', onMouseDown);
-      canvas.addEventListener('mousemove', onMouseMove);
-      canvas.addEventListener('mouseup',   onMouseUp);
-
-      requestAnimationFrame(gameLoop);
-    }
-    function gameLoop(){
-      draw();
-      updateParticles();
-      updateFloatingTexts(); 
-      requestAnimationFrame(gameLoop);
-    }
-
-    /********************************************************
-     *                  DRAW
-     ********************************************************/
-    function draw(){
-      ctx.clearRect(0,0, canvas.width, canvas.height);
-
-      // board background
-      ctx.fillStyle="#1E3353";
-      ctx.fillRect(BOARD_X,BOARD_Y, BOARD_COLS*BOARD_CELL_SIZE, BOARD_ROWS*BOARD_CELL_SIZE);
-
-      // grid lines
-      ctx.strokeStyle="#314e7e";
-      for(let r=0;r<BOARD_ROWS;r++){
-        for(let c=0;c<BOARD_COLS;c++){
-          let x= BOARD_X+ c*BOARD_CELL_SIZE;
-          let y= BOARD_Y+ r*BOARD_CELL_SIZE;
-          ctx.strokeRect(x,y, BOARD_CELL_SIZE, BOARD_CELL_SIZE);
-        }
-      }
-
-      // blocks on the board
-      for(let r=0;r<BOARD_ROWS;r++){
-        for(let c=0;c<BOARD_COLS;c++){
-          let val= board[r][c];
-          if(val && val.color){
-            drawBlock3D(BOARD_X+c*BOARD_CELL_SIZE,
-                        BOARD_Y+r*BOARD_CELL_SIZE,
-                        BOARD_CELL_SIZE, val.color);
-          }
-        }
-      }
-
-      // particles
-      drawParticles();
-
-      // preview pieces
-      for(let i=0;i<activePieces.length;i++){
-        if(activePieces[i]!==draggingPiece){
-          drawPiece(activePieces[i]);
-        }
-      }
-
-      // dragging piece
-      if(draggingPiece){
-        drawPiece(draggingPiece);
-      }
-
-      // ghost piece
-      if(showGhost && draggingPiece && ghostValid && ghostOverBoardEnough){
-        drawGhostPiece(draggingPiece, ghostX, ghostY);
-      }
-
-      // floating texts
-      drawFloatingTexts();
-    }
-
-    function drawBlock3D(x,y,size,color){
-      let grad= ctx.createLinearGradient(x,y, x+size, y+size);
-      grad.addColorStop(0, lighten(color,0.4));
-      grad.addColorStop(0.5, color);
-      grad.addColorStop(1, darken(color,0.3));
-
-      ctx.fillStyle= grad;
-      ctx.fillRect(x,y,size,size);
-
-      ctx.strokeStyle= darken(color,0.6);
-      ctx.lineWidth=1.2;
-      ctx.strokeRect(x+0.5,y+0.5,size-1,size-1);
-    }
-    function lighten(hex, ratio){
-      let c= parseInt(hex.slice(1),16);
-      let r=(c>>16)&0xFF, g=(c>>8)&0xFF, b=c&0xFF;
-      r+=(255-r)*ratio; g+=(255-g)*ratio; b+=(255-b)*ratio;
-      r=Math.round(r); g=Math.round(g); b=Math.round(b);
-      return "#"+ ((r<<16)|(g<<8)|b).toString(16).padStart(6,"0");
-    }
-    function darken(hex, ratio){
-      let c= parseInt(hex.slice(1),16);
-      let r=(c>>16)&0xFF, g=(c>>8)&0xFF, b=c&0xFF;
-      r=Math.round(r*(1-ratio)); 
-      g=Math.round(g*(1-ratio));
-      b=Math.round(b*(1-ratio));
-      return "#"+ ((r<<16)|(g<<8)|b).toString(16).padStart(6,"0");
-    }
-
-    function drawPiece(piece){
-      let scale= piece.inPreview? PREVIEW_SCALE :1;
-      for(let r=0;r<piece.shape.length;r++){
-        for(let c=0;c<piece.shape[r].length;c++){
-          if(piece.shape[r][c]===1){
-            let x= piece.x + c*BOARD_CELL_SIZE*scale;
-            let y= piece.y + r*BOARD_CELL_SIZE*scale;
-            drawBlock3D(x,y, BOARD_CELL_SIZE*scale, piece.color);
-          }
-        }
-      }
-    }
-    function drawGhostPiece(piece,gx,gy){
-      ctx.save();
-      ctx.globalAlpha=0.3;
-      let scale= piece.inPreview? PREVIEW_SCALE:1;
-      for(let r=0;r<piece.shape.length;r++){
-        for(let c=0;c<piece.shape[r].length;c++){
-          if(piece.shape[r][c]===1){
-            let cellX= gx + c*BOARD_CELL_SIZE*scale;
-            let cellY= gy + r*BOARD_CELL_SIZE*scale;
-            drawBlock3D(cellX, cellY, BOARD_CELL_SIZE*scale, piece.color);
-          }
-        }
-      }
-      ctx.restore();
-    }
-
-    /********************************************************
-     * PARTICLES 
-     ********************************************************/
-    function spawnExplosion(row,col,color){
-      if(explosionSound){
-        explosionSound.play();
-      }
-      let centerX= BOARD_X+ (col+0.5)*BOARD_CELL_SIZE;
-      let centerY= BOARD_Y+ (row+0.5)*BOARD_CELL_SIZE;
-      for(let i=0;i<PARTICLE_COUNT;i++){
-        let angle= Math.random()*2*Math.PI;
-        let speed= Math.random()*3+2;
-        let vx= Math.cos(angle)*speed;
-        let vy= Math.sin(angle)*speed;
-        particles.push({
-          x:centerX, y:centerY,
-          vx:vx, vy:vy,
-          color: color,
-          life:0
-        });
-      }
-    }
-    function updateParticles(){
-      for(let i=0;i<particles.length;i++){
-        let p=particles[i];
-        p.x+= p.vx;
-        p.y+= p.vy;
-        p.life++;
-      }
-      particles= particles.filter(p=> p.life< PARTICLE_LIFETIME);
-    }
-    function drawParticles(){
-      for(let i=0;i<particles.length;i++){
-        let p=particles[i];
-        let alpha=1-(p.life/PARTICLE_LIFETIME);
-        let size=5* alpha;
-        ctx.save();
-        ctx.globalAlpha= alpha;
-        ctx.fillStyle= p.color;
-        ctx.beginPath();
-        ctx.arc(p.x,p.y,size,0,2*Math.PI);
-        ctx.fill();
-        ctx.restore();
-      }
-    }
-
-    /********************************************************
-     * FLOATING TEXT (COMBO, POINTS)
-     ********************************************************/
-    function updateFloatingTexts(){
-      for(let i=0;i<floatingTexts.length;i++){
-        let ft= floatingTexts[i];
-        ft.life++;
-        ft.y -= 0.6;
-      }
-      floatingTexts= floatingTexts.filter(ft=> ft.life<90);
-    }
-    function drawFloatingTexts(){
-      for(let i=0;i<floatingTexts.length;i++){
-        let ft= floatingTexts[i];
-        let alpha= 1 - (ft.life/90);
-        let size= 20;
-        ctx.save();
-        ctx.globalAlpha= alpha;
-        ctx.fillStyle= ft.color || "#fff";
-        ctx.font= "bold "+size+"px Arial";
-        ctx.fillText(ft.text, ft.x, ft.y);
-        ctx.restore();
-      }
-    }
-
-    /********************************************************
-     * GENERATE (FIX SHAPE WIDTH)
-     ********************************************************/
-    function generateNewPieces(){
-      activePieces=[];
-
-      let shapesArr=[];
-      for(let i=0;i<3;i++){
-        let shape= ALL_FIGURES[Math.floor(Math.random()*ALL_FIGURES.length)];
-        let shapeClone= shape.map(row=> [...row]);
-        let color= COLORS[Math.floor(Math.random()*COLORS.length)];
-        shapesArr.push({shape: shapeClone, color});
-      }
-
-      // 1) LEFT
-      {
-        let {shape, color} = shapesArr[0];
-        let maxCols = shape.reduce((max, row)=> Math.max(max, row.length), 0);
-        let shapeWidth= maxCols* BOARD_CELL_SIZE* PREVIEW_SCALE;
-        let pieceLeft={
-          shape,
-          color,
-          x: LEFT_MARGIN,
-          y: PREVIEW_Y,
-          originalX: LEFT_MARGIN,
-          originalY: PREVIEW_Y,
-          inPreview:true
-        };
-        activePieces.push(pieceLeft);
-      }
-
-      // 2) RIGHT
-      {
-        let {shape, color} = shapesArr[1];
-        let maxCols = shape.reduce((max, row)=> Math.max(max, row.length), 0);
-        let shapeWidth= maxCols* BOARD_CELL_SIZE* PREVIEW_SCALE;
-        let pieceRight={
-          shape,
-          color,
-          x: CANVAS_WIDTH - RIGHT_MARGIN - shapeWidth,
-          y: PREVIEW_Y,
-          originalX: CANVAS_WIDTH - RIGHT_MARGIN - shapeWidth,
-          originalY: PREVIEW_Y,
-          inPreview:true
-        };
-        activePieces.push(pieceRight);
-      }
-
-      // 3) CENTER
-      {
-        let {shape, color} = shapesArr[2];
-        let maxCols = shape.reduce((max, row)=> Math.max(max, row.length), 0);
-        let shapeWidth= maxCols* BOARD_CELL_SIZE* PREVIEW_SCALE;
-        let pieceCenter={
-          shape,
-          color,
-          x: (CANVAS_WIDTH - shapeWidth)/2,
-          y: PREVIEW_Y,
-          originalX: (CANVAS_WIDTH - shapeWidth)/2,
-          originalY: PREVIEW_Y,
-          inPreview:true
-        };
-        activePieces.push(pieceCenter);
-      }
-
-      if(!canPlaceAnyPiece()){
-        endGame();
-      }
-    }
-
-    function canPlaceAnyPiece(){
-      for(let p of activePieces){
-        if(canPlaceThisPiece(p)) return true;
-      }
-      return false;
-    }
-    function canPlaceThisPiece(p){
-      let h=p.shape.length;
-      let w=p.shape.reduce((max, row)=> Math.max(max, row.length),0);
-      for(let row=0; row<=BOARD_ROWS-h; row++){
-        for(let col=0; col<=BOARD_COLS-w; col++){
-          if(checkFit(p,row,col)) return true;
-        }
-      }
-      return false;
-    }
-    function checkFit(p, baseRow, baseCol){
-      for(let r=0;r<p.shape.length;r++){
-        for(let c=0;c<p.shape[r].length;c++){
-          if(p.shape[r][c]===1){
-            if(board[baseRow+r][baseCol+c]!==0)return false;
-          }
-        }
-      }
-      return true;
-    }
-
-    /********************************************************
-     * SNAP & CLEAR (COMBO)
-     ********************************************************/
-    function snapPieceToBoard(piece){
-      let col= Math.round((piece.x - BOARD_X)/BOARD_CELL_SIZE);
-      let row= Math.round((piece.y - BOARD_Y)/BOARD_CELL_SIZE);
-
-      if(row<0||col<0)return false;
-      if(row+piece.shape.length>BOARD_ROWS)return false;
-      let maxCols = piece.shape.reduce((m, row)=> Math.max(m, row.length),0);
-      if(col+maxCols> BOARD_COLS)return false;
-
-      for(let rr=0; rr<piece.shape.length; rr++){
-        for(let cc=0; cc<piece.shape[rr].length; cc++){
-          if(piece.shape[rr][cc]===1){
-            if(board[row+rr][col+cc]!==0)return false;
-          }
-        }
-      }
-      // place
-      for(let rr=0; rr<piece.shape.length; rr++){
-        for(let cc=0; cc<piece.shape[rr].length; cc++){
-          if(piece.shape[rr][cc]===1){
-            board[row+rr][col+cc]= { color: piece.color };
-          }
-        }
-      }
-      if(placeSound) placeSound.play();
-      return true;
-    }
-    function checkAndClearLines(){
-      let rowsCleared=[];
-      let colsCleared=[];
-
-      for(let r=0;r<BOARD_ROWS;r++){
-        let full=true;
-        for(let c=0;c<BOARD_COLS;c++){
-          if(board[r][c]===0){ full=false; break; }
-        }
-        if(full) rowsCleared.push(r);
-      }
-      for(let c=0;c<BOARD_COLS;c++){
-        let full=true;
-        for(let r=0;r<BOARD_ROWS;r++){
-          if(board[r][c]===0){ full=false; break; }
-        }
-        if(full) colsCleared.push(c);
-      }
-
-      let total= rowsCleared.length+ colsCleared.length;
-      if(total>0){
-        if(comboTurnsLeft>0){
-          comboStreak++;
-        } else {
-          comboStreak=2;
-        }
-        comboTurnsLeft=2; 
-
-        if(clearSound) clearSound.play();
-
-        for(let row of rowsCleared){
-          for(let cc=0; cc<BOARD_COLS; cc++){
-            if(board[row][cc] && board[row][cc].color){
-              spawnExplosion(row,cc, board[row][cc].color);
-            }
-            board[row][cc]=0;
-          }
-        }
-        for(let col of colsCleared){
-          for(let rr=0; rr<BOARD_ROWS; rr++){
-            if(board[rr][col] && board[rr][col].color){
-              spawnExplosion(rr,col, board[rr][col].color);
-            }
-            board[rr][col]=0;
-          }
-        }
-
-        let basePoints= total*10;
-        let finalPoints= basePoints* comboStreak;
-        score+= finalPoints;
-        document.getElementById("scoreValue").textContent=score;
-
-        let floatX= BOARD_X+ (BOARD_COLS*BOARD_CELL_SIZE)/2 - 40;
-        let floatY= BOARD_Y+ (BOARD_ROWS*BOARD_CELL_SIZE)/2;
-
-        // если total=1 => не показывать "Combo!"
-        let comboText= "";
-        if(total>1 && comboStreak>1){
-          comboText= " (Combo x"+ comboStreak+")";
-        }
-        let textForPoints= "+"+ finalPoints + comboText;
-        floatingTexts.push({
-          x: floatX,
-          y: floatY,
-          text: textForPoints,
-          life: 0,
-          color: "#FFD700"
-        });
-        if(total>1 && comboStreak>1){
-          floatingTexts.push({
-            x: floatX,
-            y: floatY+25,
-            text: "Combo!",
-            life: 0,
-            color: "#FFEF00"
-          });
-        }
-      } else {
-        if(comboTurnsLeft>0){
-          comboTurnsLeft--;
-          if(comboTurnsLeft===0){
-            comboStreak=1;
-          }
-        }
-      }
-    }
-
-    /********************************************************
-     * DRAG & DROP
-     ********************************************************/
-    function onMouseDown(e){
-      if(isGameOverFlag)return;
-      e.preventDefault();
-      let {x,y}= getMousePos(e);
-
-      for(let i= activePieces.length-1; i>=0; i--){
-        let piece= activePieces[i];
-        if(isPointerOnPiece(piece,x,y)){
-          draggingPiece= piece;
-          offsetX= x- piece.x;
-          offsetY= y- piece.y;
-
-          draggingPiece.x= x- offsetX;
-          draggingPiece.y= y- offsetY;
-
-          piece.inPreview=false;
-          activePieces.splice(i,1);
-          activePieces.push(piece);
-
-          onMouseMove(e);
-          break;
-        }
-      }
-    }
-    function onMouseMove(e){
-      if(!draggingPiece||isGameOverFlag)return;
-      e.preventDefault();
-      let {x,y}= getMousePos(e);
-      draggingPiece.x= x-offsetX;
-      draggingPiece.y= y-offsetY;
-
-      ghostValid=false;
-      ghostOverBoardEnough=false;
-      let scale= draggingPiece.inPreview? PREVIEW_SCALE:1;
-
-      let totalBlocks=0;
-      let blocksOver=0;
-      for(let rr=0; rr<draggingPiece.shape.length; rr++){
-        for(let cc=0; cc<draggingPiece.shape[rr].length; cc++){
-          if(draggingPiece.shape[rr][cc]===1){
-            totalBlocks++;
-            let blockX= draggingPiece.x + cc*(BOARD_CELL_SIZE*scale);
-            let blockY= draggingPiece.y + rr*(BOARD_CELL_SIZE*scale);
-            let centerX= blockX+ (BOARD_CELL_SIZE*scale)/2;
-            let centerY= blockY+ (BOARD_CELL_SIZE*scale)/2;
-            if(centerX>=BOARD_X && centerX<= BOARD_X+BOARD_COLS*BOARD_CELL_SIZE &&
-               centerY>=BOARD_Y && centerY<= BOARD_Y+BOARD_ROWS*BOARD_CELL_SIZE){
-              blocksOver++;
-            }
-          }
-        }
-      }
-      if(blocksOver> totalBlocks/2){
-        ghostOverBoardEnough=true;
-      }
-
-      let col= Math.round((draggingPiece.x-BOARD_X)/(BOARD_CELL_SIZE*scale));
-      let row= Math.round((draggingPiece.y-BOARD_Y)/(BOARD_CELL_SIZE*scale));
-      let maxCols= draggingPiece.shape.reduce((m, rowA)=> Math.max(m, rowA.length),0);
-
-      if(row>=0 && col>=0 &&
-         row+ draggingPiece.shape.length<=BOARD_ROWS &&
-         col+ maxCols<=BOARD_COLS){
-        if(checkBlocksEmpty(draggingPiece,row,col)){
-          ghostValid=true;
-          ghostX= BOARD_X+ col*BOARD_CELL_SIZE;
-          ghostY= BOARD_Y+ row*BOARD_CELL_SIZE;
-        }
-      }
-    }
-    function onMouseUp(e){
-      if(!draggingPiece||isGameOverFlag)return;
-      e.preventDefault();
-      let {x,y}= getMousePos(e);
-      if(snapPieceToBoard(draggingPiece)){
-        let idx= activePieces.indexOf(draggingPiece);
-        if(idx!==-1){
-          activePieces.splice(idx,1);
-        }
-        checkAndClearLines();
-        if(activePieces.length>0 && !canPlaceAnyPiece()){
-          endGame();
-        } else if(activePieces.length===0){
-          generateNewPieces();
-        }
-      } else {
-        revertPiece(draggingPiece);
-      }
-      draggingPiece=null;
-    }
-
-    function revertPiece(piece){
-      piece.x= piece.originalX;
-      piece.y= piece.originalY;
-      piece.inPreview=true;
-    }
-
-    function getMousePos(e){
-      let rect= canvas.getBoundingClientRect();
-      return {
-        x:e.clientX- rect.left,
-        y:e.clientY- rect.top
-      };
-    }
-    function isPointerOnPiece(piece,x,y){
-      let scale= piece.inPreview? PREVIEW_SCALE:1;
-      let maxCols= piece.shape.reduce((m, row)=> Math.max(m, row.length),0);
-      let w= maxCols* BOARD_CELL_SIZE* scale;
-      let h= piece.shape.length* BOARD_CELL_SIZE* scale;
-      return (x>= piece.x && x<= piece.x+ w &&
-              y>= piece.y && y<= piece.y+ h);
-    }
-    function checkBlocksEmpty(piece, baseRow, baseCol){
-      for(let rr=0; rr<piece.shape.length; rr++){
-        for(let cc=0; cc<piece.shape[rr].length; cc++){
-          if(piece.shape[rr][cc]===1){
-            if(board[baseRow+rr][baseCol+cc]!==0)return false;
-          }
-        }
-      }
-      return true;
-    }
-
-    /********************************************************
-     * GAME OVER + RESTART
-     ********************************************************/
-    function endGame(){
-      isGameOverFlag=true;
-      document.getElementById("gameOverMessage").style.display="block";
-    }
-    function restartGame(){
-      location.reload();
-    }
-
-    init();
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
