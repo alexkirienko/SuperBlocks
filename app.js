@@ -44,7 +44,8 @@ let sessionId=null;
 
 // SERVER ENDPOINT
 const SERVER_URL="https://my-blockblast.cloudfunctions.net/gameApi"; 
-// Замените <your-project-id> на реальный
+
+
 
 ////////////////////////////////////////////////////////////
 // 2. INIT
