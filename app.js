@@ -43,7 +43,7 @@ let score=0;
 let sessionId=null;
 
 // SERVER ENDPOINT
-const SERVER_URL="https://<your-project-id>.cloudfunctions.net/gameApi"; 
+const SERVER_URL="https://my-blockblast.cloudfunctions.net/gameApi"; 
 // Замените <your-project-id> на реальный
 
 ////////////////////////////////////////////////////////////
