@@ -2,50 +2,83 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Block Blast (v0.04) - Server Score</title>
+  <title>Block Blast (Server Leaderboard) - v0.05</title>
   <style>
-    /* ============ БАЗОВЫЕ СТИЛИ ============ */
     html, body {
-      margin: 0;
-      padding: 0;
-      background: #2D3A56;
+      margin: 0; 
+      padding: 0; 
+      background: #2D3A56; 
       text-align: center;
       user-select: none;
     }
+
     #version {
       position: absolute;
-      top: 0;
-      right: 0;
+      top: 0; right: 0;
       padding: 5px 10px;
       font-family: Arial, sans-serif;
       font-size: 12px;
       color: #ccc;
       opacity: 0.8;
     }
+
     #scoreboard {
       font-family: Arial, sans-serif;
       font-weight: bold;
       font-size: 48px;
       color: #fff;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-      padding: 10px 0 0 0;
+      padding-top: 10px;
     }
-    /* Контейнер под канву */
+
+    /* Контейнер под всё: слева — leaderboard, справа — поле */
+    #wrapper {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      align-items: flex-start;
+      margin: 0 auto;
+      width: 900px; /* подгонять при желании */
+    }
+
+    /* Левая панель - Leaderboard */
+    #leaderboard {
+      width: 220px;
+      background: #1E3353;
+      border: 2px solid #1D2A40;
+      border-radius: 5px;
+      margin-right: 10px;
+      padding: 10px;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      box-sizing: border-box;
+      text-align: left;
+    }
+    #leaderboard h3 {
+      margin: 0 0 10px 0;
+      padding: 0;
+      font-size: 20px;
+      text-align: center;
+    }
+    .lb-entry {
+      margin: 4px 0;
+      font-size: 16px;
+    }
+    .gold   { color: #FFD700; }
+    .silver { color: #C0C0C0; }
+    .bronze { color: #CD7F32; }
+
+    /* Правая часть - Canvas */
     #gameContainer {
-      display: inline-block;
       position: relative;
       background: #2B3B57;
       border: 2px solid #1D2A40;
       border-radius: 10px;
       box-shadow: 0 0 15px rgba(0,0,0,0.3);
-      margin: 0;
-      padding: 0;
     }
-    /* Окно Game Over */
     #gameOverMessage {
       position: absolute;
-      top: 50%;
-      left: 50%;
+      top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       font-family: Arial, sans-serif;
       font-weight: bold;
@@ -99,19 +132,28 @@
   </style>
 </head>
 <body>
-  <div id="version">Version 0.04</div>
+  <div id="version">Version 0.05</div>
 
   <div id="scoreboard">
     Score: <span id="scoreValue">0</span>
   </div>
 
-  <div id="gameContainer">
-    <canvas id="gameCanvas" width="450" height="650"></canvas>
-    <div id="gameOverMessage">
-      GAME OVER!
-      <input type="text" id="nameInput" placeholder="Your Name"/>
-      <button id="okBtn">OK</button>
-      <button id="restartBtn">Restart</button>
+  <div id="wrapper">
+    <!-- ЛИДЕРБОРД СЛЕВА -->
+    <div id="leaderboard">
+      <h3>Leaderboard</h3>
+      <div id="lb-entries"></div>
+    </div>
+
+    <!-- ИГРОВОЕ ПОЛЕ СПРАВА -->
+    <div id="gameContainer">
+      <canvas id="gameCanvas" width="450" height="650"></canvas>
+      <div id="gameOverMessage">
+        GAME OVER!
+        <input type="text" id="nameInput" placeholder="Your Name"/>
+        <button id="okBtn">OK</button>
+        <button id="restartBtn">Restart</button>
+      </div>
     </div>
   </div>
 
